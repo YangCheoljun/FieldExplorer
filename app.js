@@ -1,4 +1,7 @@
 const STORAGE_KEY = "fieldExplorerRecords";
+const DB_NAME = "fieldExplorerDb";
+const STORE_NAME = "appData";
+const RECORDS_DB_KEY = "records";
 
 const form = document.querySelector("#recordForm");
 const recordList = document.querySelector("#recordList");
@@ -22,12 +25,12 @@ const audioTranscript = document.querySelector("#audioTranscript");
 const getLocationButton = document.querySelector("#getLocation");
 const saveStatus = document.querySelector("#saveStatus");
 
-const MAX_PHOTOS = 6;
-const MAX_IMAGE_SIZE = 1000;
-const IMAGE_QUALITY = 0.72;
-const MAX_AUDIO_SAVE_LENGTH = 1_500_000;
+const MAX_PHOTOS = 4;
+const MAX_IMAGE_SIZE = 720;
+const IMAGE_QUALITY = 0.58;
+const MAX_AUDIO_SAVE_LENGTH = 900_000;
 
-let records = loadRecords();
+let records = [];
 let selectedPhotos = [];
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -35,7 +38,7 @@ let recordedAudioDataUrl = "";
 let recordingRecognition = null;
 let recordingTranscriptParts = [];
 
-renderRecords();
+initializeApp();
 setupVoiceTitle();
 setupVoiceDescription();
 
@@ -78,7 +81,7 @@ clearPhotosButton.addEventListener("click", () => {
   setSaveStatus("첨부한 사진을 비웠습니다.");
 });
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const formData = new FormData(form);
@@ -103,11 +106,15 @@ form.addEventListener("submit", (event) => {
 
   try {
     records.unshift(newRecord);
-    saveRecords();
+    await saveRecords();
     setSaveStatus("저장되었습니다. 아래 기록 목록에서 확인할 수 있습니다.");
-  } catch {
+  } catch (error) {
     records.shift();
-    setSaveStatus("저장 공간이 부족합니다. 사진 수를 줄이거나 짧은 녹음으로 다시 저장해주세요.", true);
+    setSaveStatus(
+      "저장 공간이 부족합니다. 사진을 1~2장으로 줄이거나 녹음 재생 저장 없이 다시 시도해주세요.",
+      true,
+    );
+    console.error(error);
     return;
   }
 
@@ -115,7 +122,7 @@ form.addEventListener("submit", (event) => {
   resetForm();
 });
 
-clearRecordsButton.addEventListener("click", () => {
+clearRecordsButton.addEventListener("click", async () => {
   if (records.length === 0) {
     return;
   }
@@ -127,7 +134,7 @@ clearRecordsButton.addEventListener("click", () => {
   }
 
   records = [];
-  saveRecords();
+  await saveRecords();
   renderRecords();
 });
 
@@ -299,7 +306,38 @@ function focusDescriptionForKeyboardDictation() {
   setSaveStatus("아이폰에서는 설명 칸을 누른 뒤 키보드의 마이크 버튼으로 받아쓰기를 사용해보세요.");
 }
 
-function loadRecords() {
+async function initializeApp() {
+  records = await loadRecords();
+  renderRecords();
+}
+
+async function loadRecords() {
+  if (!window.indexedDB) {
+    return loadRecordsFromLocalStorage();
+  }
+
+  try {
+    const db = await openRecordsDb();
+    const savedRecords = await readRecordsFromDb(db);
+
+    if (Array.isArray(savedRecords)) {
+      return savedRecords;
+    }
+
+    const localRecords = loadRecordsFromLocalStorage();
+
+    if (localRecords.length > 0) {
+      await writeRecordsToDb(db, localRecords);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
+    return localRecords;
+  } catch {
+    return loadRecordsFromLocalStorage();
+  }
+}
+
+function loadRecordsFromLocalStorage() {
   const savedRecords = localStorage.getItem(STORAGE_KEY);
 
   if (!savedRecords) {
@@ -313,8 +351,53 @@ function loadRecords() {
   }
 }
 
-function saveRecords() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+async function saveRecords() {
+  if (!window.indexedDB) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    return;
+  }
+
+  const db = await openRecordsDb();
+  await writeRecordsToDb(db, records);
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function openRecordsDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+
+    request.addEventListener("upgradeneeded", () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    });
+
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+function readRecordsFromDb(db) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readonly");
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get(RECORDS_DB_KEY);
+
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+function writeRecordsToDb(db, nextRecords) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    store.put(nextRecords, RECORDS_DB_KEY);
+    transaction.addEventListener("complete", resolve);
+    transaction.addEventListener("error", () => reject(transaction.error));
+  });
 }
 
 function renderRecords() {
