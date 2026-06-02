@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>현장탐방 기록 앱</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="header">
+        <div>
+          <p class="eyebrow">Field Explorer MVP</p>
+          <h1>현장탐방 기록</h1>
+          <p class="intro">
+            사진, 음성메모, 위치, 설명, 태그를 한 번에 남기는 작은 기록장입니다.
+          </p>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form id="recordForm" class="record-form">
+          <div class="form-title-row">
+            <h2>기록 추가</h2>
+            <button type="submit">저장</button>
+          </div>
+          <p id="saveStatus" class="save-status" aria-live="polite"></p>
+
+          <label>
+            제목
+            <div class="input-with-button">
+              <input
+                id="title"
+                name="title"
+                type="text"
+                placeholder="예: 제주 감귤 농장 교육"
+                required
+              />
+              <button id="voiceTitleButton" type="button" class="secondary-button">음성 입력</button>
+            </div>
+          </label>
+
+          <label>
+            사진 첨부
+            <input id="photo" name="photo" type="file" accept="image/*" multiple />
+          </label>
+
+          <div id="photoPreview" class="photo-preview empty">사진 미리보기</div>
+          <button id="clearPhotos" type="button" class="secondary-button full-button">사진 비우기</button>
+
+          <label>
+            음성메모 파일 첨부
+            <input id="audio" name="audio" type="file" accept="audio/*" />
+          </label>
+
+          <div class="recorder-box">
+            <div class="button-row">
+              <button id="startRecording" type="button" class="secondary-button">녹음 시작</button>
+              <button id="stopRecording" type="button" class="secondary-button" disabled>녹음 정지</button>
+            </div>
+            <p id="recordingStatus" class="help-text">아직 녹음된 음성메모가 없습니다.</p>
+            <audio id="recordedAudio" controls hidden></audio>
+          </div>
+
+          <label>
+            위치 메모
+            <div class="input-with-button">
+              <input
+                id="location"
+                name="location"
+                type="text"
+                placeholder="예: 제주시 조천읍 감귤 온실"
+              />
+              <button id="getLocation" type="button" class="secondary-button">현재 위치</button>
+            </div>
+          </label>
+
+          <label>
+            설명 메모
+            <textarea
+              id="description"
+              name="description"
+              rows="5"
+              placeholder="현장에서 본 것, 들은 것, 기억하고 싶은 내용을 적어주세요."
+            ></textarea>
+          </label>
+
+          <label>
+            태그
+            <input
+              id="tags"
+              name="tags"
+              type="text"
+              placeholder="예: 제주, 농업교육, 감귤"
+            />
+          </label>
+        </form>
+
+        <section class="record-list-section">
+          <div class="list-header">
+            <div>
+              <h2>기록 목록</h2>
+              <p id="recordCount">0개의 기록</p>
+            </div>
+            <button id="clearRecords" type="button" class="secondary-button">전체 삭제</button>
+          </div>
+
+          <div id="recordList" class="record-list">
+            <div class="empty-list">아직 저장된 기록이 없습니다.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
