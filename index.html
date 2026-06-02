@@ -42,7 +42,23 @@
 
           <label>
             사진 첨부
-            <input id="photo" name="photo" type="file" accept="image/*" multiple />
+            <input id="photoLibrary" class="hidden-file-input" type="file" accept="image/*" multiple />
+            <input id="photoCamera" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+            <input id="photoFile" class="hidden-file-input" type="file" multiple />
+            <div class="photo-actions">
+              <button id="chooseLibrary" type="button" class="icon-button secondary-button">
+                <span class="button-icon">□</span>
+                보관함
+              </button>
+              <button id="chooseCamera" type="button" class="icon-button secondary-button">
+                <span class="button-icon">○</span>
+                카메라
+              </button>
+              <button id="chooseFile" type="button" class="icon-button secondary-button">
+                <span class="button-icon">⌂</span>
+                파일
+              </button>
+            </div>
           </label>
 
           <div id="photoPreview" class="photo-preview empty">사진 미리보기</div>
@@ -60,6 +76,15 @@
             </div>
             <p id="recordingStatus" class="help-text">아직 녹음된 음성메모가 없습니다.</p>
             <audio id="recordedAudio" controls hidden></audio>
+            <label class="transcript-label">
+              녹음 텍스트
+              <textarea
+                id="audioTranscript"
+                name="audioTranscript"
+                rows="4"
+                placeholder="녹음 중 음성인식이 지원되면 여기에 전체 내용이 표시됩니다."
+              ></textarea>
+            </label>
           </div>
 
           <label>
@@ -77,12 +102,15 @@
 
           <label>
             설명 메모
-            <textarea
-              id="description"
-              name="description"
-              rows="5"
-              placeholder="현장에서 본 것, 들은 것, 기억하고 싶은 내용을 적어주세요."
-            ></textarea>
+            <div class="textarea-with-button">
+              <textarea
+                id="description"
+                name="description"
+                rows="5"
+                placeholder="현장에서 본 것, 들은 것, 기억하고 싶은 내용을 적어주세요."
+              ></textarea>
+              <button id="voiceDescriptionButton" type="button" class="secondary-button">음성 입력</button>
+            </div>
           </label>
 
           <label>

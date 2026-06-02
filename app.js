@@ -4,14 +4,21 @@ const form = document.querySelector("#recordForm");
 const recordList = document.querySelector("#recordList");
 const recordCount = document.querySelector("#recordCount");
 const clearRecordsButton = document.querySelector("#clearRecords");
-const photoInput = document.querySelector("#photo");
+const photoLibraryInput = document.querySelector("#photoLibrary");
+const photoCameraInput = document.querySelector("#photoCamera");
+const photoFileInput = document.querySelector("#photoFile");
 const photoPreview = document.querySelector("#photoPreview");
 const clearPhotosButton = document.querySelector("#clearPhotos");
+const chooseLibraryButton = document.querySelector("#chooseLibrary");
+const chooseCameraButton = document.querySelector("#chooseCamera");
+const chooseFileButton = document.querySelector("#chooseFile");
 const voiceTitleButton = document.querySelector("#voiceTitleButton");
+const voiceDescriptionButton = document.querySelector("#voiceDescriptionButton");
 const startRecordingButton = document.querySelector("#startRecording");
 const stopRecordingButton = document.querySelector("#stopRecording");
 const recordingStatus = document.querySelector("#recordingStatus");
 const recordedAudio = document.querySelector("#recordedAudio");
+const audioTranscript = document.querySelector("#audioTranscript");
 const getLocationButton = document.querySelector("#getLocation");
 const saveStatus = document.querySelector("#saveStatus");
 
@@ -25,35 +32,48 @@ let selectedPhotos = [];
 let mediaRecorder = null;
 let recordedChunks = [];
 let recordedAudioDataUrl = "";
+let recordingRecognition = null;
+let recordingTranscriptParts = [];
 
 renderRecords();
 setupVoiceTitle();
+setupVoiceDescription();
 
-photoInput.addEventListener("change", async () => {
+chooseLibraryButton.addEventListener("click", () => photoLibraryInput.click());
+chooseCameraButton.addEventListener("click", () => photoCameraInput.click());
+chooseFileButton.addEventListener("click", () => photoFileInput.click());
+
+[photoLibraryInput, photoCameraInput, photoFileInput].forEach((input) => {
+  input.addEventListener("change", () => handlePhotoSelection(input));
+});
+
+async function handlePhotoSelection(input) {
   setSaveStatus("");
   const remainingSlots = MAX_PHOTOS - selectedPhotos.length;
 
   if (remainingSlots <= 0) {
     setSaveStatus(`사진은 테스트 버전에서 최대 ${MAX_PHOTOS}장까지 저장합니다.`, true);
-    photoInput.value = "";
+    input.value = "";
     return;
   }
 
-  const files = Array.from(photoInput.files).slice(0, remainingSlots);
+  const files = Array.from(input.files).slice(0, remainingSlots);
 
-  if (photoInput.files.length > remainingSlots) {
+  if (input.files.length > remainingSlots) {
     setSaveStatus(`사진은 테스트 버전에서 최대 ${MAX_PHOTOS}장까지 저장합니다.`, true);
   }
 
   const newPhotos = await Promise.all(files.map(readPhotoFile));
   selectedPhotos = selectedPhotos.concat(newPhotos);
-  photoInput.value = "";
+  input.value = "";
   renderPhotoPreview();
-});
+}
 
 clearPhotosButton.addEventListener("click", () => {
   selectedPhotos = [];
-  photoInput.value = "";
+  photoLibraryInput.value = "";
+  photoCameraInput.value = "";
+  photoFileInput.value = "";
   renderPhotoPreview();
   setSaveStatus("첨부한 사진을 비웠습니다.");
 });
@@ -63,6 +83,7 @@ form.addEventListener("submit", (event) => {
 
   const formData = new FormData(form);
   const audioFile = formData.get("audio");
+  const transcript = formData.get("audioTranscript").trim();
 
   const newRecord = {
     id: createId(),
@@ -72,6 +93,8 @@ form.addEventListener("submit", (event) => {
     photoDataUrl: selectedPhotos[0]?.dataUrl || "",
     audioName: recordedAudioDataUrl ? "직접 녹음한 음성메모" : audioFile?.name || "",
     audioDataUrl: getStorableAudioDataUrl(),
+    audioTranscript: transcript,
+    audioSummary: summarizeTranscript(transcript),
     location: formData.get("location").trim(),
     description: formData.get("description").trim(),
     tags: parseTags(formData.get("tags")),
@@ -132,9 +155,11 @@ startRecordingButton.addEventListener("click", async () => {
       recordedAudio.hidden = false;
       recordingStatus.textContent = "녹음이 저장되었습니다. 저장 버튼을 누르면 기록에 포함됩니다.";
       stream.getTracks().forEach((track) => track.stop());
+      stopRecordingTranscription();
     });
 
     mediaRecorder.start();
+    startRecordingTranscription();
     startRecordingButton.disabled = true;
     stopRecordingButton.disabled = false;
     recordingStatus.textContent = "녹음 중입니다.";
@@ -149,11 +174,12 @@ stopRecordingButton.addEventListener("click", () => {
   }
 
   mediaRecorder.stop();
+  stopRecordingTranscription();
   startRecordingButton.disabled = false;
   stopRecordingButton.disabled = true;
 });
 
-getLocationButton.addEventListener("click", () => {
+getLocationButton.addEventListener("click", async () => {
   const locationInput = document.querySelector("#location");
 
   if (!navigator.geolocation) {
@@ -165,10 +191,11 @@ getLocationButton.addEventListener("click", () => {
   getLocationButton.textContent = "확인 중";
 
   navigator.geolocation.getCurrentPosition(
-    (position) => {
+    async (position) => {
       const latitude = position.coords.latitude.toFixed(6);
       const longitude = position.coords.longitude.toFixed(6);
       locationInput.value = `위도 ${latitude}, 경도 ${longitude}`;
+      locationInput.value = await getAddressFromCoordinates(latitude, longitude);
       getLocationButton.disabled = false;
       getLocationButton.textContent = "현재 위치";
     },
@@ -222,10 +249,54 @@ function setupVoiceTitle() {
   });
 }
 
+function setupVoiceDescription() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    voiceDescriptionButton.textContent = "키보드 마이크";
+    voiceDescriptionButton.addEventListener("click", focusDescriptionForKeyboardDictation);
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "ko-KR";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  voiceDescriptionButton.addEventListener("click", () => {
+    voiceDescriptionButton.disabled = true;
+    voiceDescriptionButton.textContent = "듣는 중";
+    recognition.start();
+  });
+
+  recognition.addEventListener("result", (event) => {
+    const descriptionInput = document.querySelector("#description");
+    const text = event.results[0][0].transcript.trim();
+    descriptionInput.value = [descriptionInput.value.trim(), text].filter(Boolean).join("\n");
+  });
+
+  recognition.addEventListener("end", () => {
+    voiceDescriptionButton.disabled = false;
+    voiceDescriptionButton.textContent = "음성 입력";
+  });
+
+  recognition.addEventListener("error", () => {
+    voiceDescriptionButton.disabled = false;
+    voiceDescriptionButton.textContent = "키보드 마이크";
+    focusDescriptionForKeyboardDictation();
+  });
+}
+
 function focusTitleForKeyboardDictation() {
   const titleInput = document.querySelector("#title");
   titleInput.focus();
   setSaveStatus("아이폰에서는 제목 칸을 누른 뒤 키보드의 마이크 버튼으로 받아쓰기를 사용해보세요.");
+}
+
+function focusDescriptionForKeyboardDictation() {
+  const descriptionInput = document.querySelector("#description");
+  descriptionInput.focus();
+  setSaveStatus("아이폰에서는 설명 칸을 누른 뒤 키보드의 마이크 버튼으로 받아쓰기를 사용해보세요.");
 }
 
 function loadRecords() {
@@ -277,6 +348,12 @@ function renderRecordCard(record) {
   const audioPlayer = record.audioDataUrl
     ? `<audio class="record-audio" src="${record.audioDataUrl}" controls></audio>`
     : "";
+  const audioSummary = record.audioSummary
+    ? `<div class="summary-box"><strong>녹음 요약</strong>${escapeHtml(record.audioSummary)}</div>`
+    : "";
+  const audioTranscript = record.audioTranscript
+    ? `<details class="transcript-box"><summary>전체 녹음 텍스트</summary><p>${escapeHtml(record.audioTranscript)}</p></details>`
+    : "";
 
   return `
     <article class="record-card">
@@ -287,6 +364,8 @@ function renderRecordCard(record) {
         <p class="meta-row">위치: ${escapeHtml(location)}</p>
         <p class="meta-row">음성: ${escapeHtml(audio)}</p>
         ${audioPlayer}
+        ${audioSummary}
+        ${audioTranscript}
         <p class="description">${escapeHtml(description)}</p>
         <div class="tag-list">${tags || `<span class="tag">태그 없음</span>`}</div>
       </div>
@@ -382,10 +461,107 @@ function resetForm() {
   recordedChunks = [];
   recordedAudio.removeAttribute("src");
   recordedAudio.hidden = true;
+  audioTranscript.value = "";
+  recordingTranscriptParts = [];
   recordingStatus.textContent = "아직 녹음된 음성메모가 없습니다.";
   startRecordingButton.disabled = false;
   stopRecordingButton.disabled = true;
   renderPhotoPreview();
+}
+
+async function getAddressFromCoordinates(latitude, longitude) {
+  const coordinateText = `위도 ${latitude}, 경도 ${longitude}`;
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=ko`;
+
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return coordinateText;
+    }
+
+    const data = await response.json();
+    const address = data.display_name;
+
+    if (!address) {
+      return coordinateText;
+    }
+
+    return `${address} (${coordinateText})`;
+  } catch {
+    return coordinateText;
+  }
+}
+
+function startRecordingTranscription() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    recordingStatus.textContent = "녹음 중입니다. 이 브라우저에서는 녹음 텍스트 변환을 지원하지 않습니다.";
+    return;
+  }
+
+  recordingTranscriptParts = [];
+  recordingRecognition = new SpeechRecognition();
+  recordingRecognition.lang = "ko-KR";
+  recordingRecognition.continuous = true;
+  recordingRecognition.interimResults = true;
+
+  recordingRecognition.addEventListener("result", (event) => {
+    let interimText = "";
+
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const text = event.results[index][0].transcript.trim();
+
+      if (event.results[index].isFinal) {
+        recordingTranscriptParts.push(text);
+      } else {
+        interimText = text;
+      }
+    }
+
+    audioTranscript.value = [recordingTranscriptParts.join(" "), interimText].filter(Boolean).join(" ");
+  });
+
+  recordingRecognition.addEventListener("error", () => {
+    recordingStatus.textContent = "녹음 중입니다. 음성 텍스트 변환은 지원되지 않거나 권한이 필요합니다.";
+  });
+
+  try {
+    recordingRecognition.start();
+  } catch {
+    recordingRecognition = null;
+  }
+}
+
+function stopRecordingTranscription() {
+  if (!recordingRecognition) {
+    return;
+  }
+
+  try {
+    recordingRecognition.stop();
+  } catch {
+    // 이미 멈춘 경우에는 그대로 둡니다.
+  }
+}
+
+function summarizeTranscript(transcript) {
+  if (!transcript) {
+    return "";
+  }
+
+  const sentences = transcript
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?。！？])\s+|(?<=다)\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  if (sentences.length === 0) {
+    return transcript.slice(0, 120);
+  }
+
+  return sentences.slice(0, 2).join(" ");
 }
 
 function createId() {

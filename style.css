@@ -68,6 +68,10 @@ button:hover {
   width: 100%;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
 .app-shell {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
@@ -173,6 +177,42 @@ textarea {
   grid-template-columns: 1fr auto;
 }
 
+.textarea-with-button {
+  display: grid;
+  gap: 8px;
+}
+
+.textarea-with-button button {
+  justify-self: end;
+}
+
+.photo-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.icon-button {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+  min-height: 76px;
+  padding: 10px 8px;
+}
+
+.button-icon {
+  align-items: center;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  width: 28px;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
@@ -207,6 +247,10 @@ textarea {
 .recorder-box audio {
   margin-top: 10px;
   width: 100%;
+}
+
+.transcript-label {
+  margin: 12px 0 0;
 }
 
 .photo-preview {
@@ -293,6 +337,21 @@ textarea {
   width: 100%;
 }
 
+.transcript-box,
+.summary-box {
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+}
+
+.summary-box strong,
+.transcript-box strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
 .record-content {
   padding: 16px;
 }
@@ -351,6 +410,10 @@ textarea {
 
   .input-with-button {
     grid-template-columns: 1fr;
+  }
+
+  .photo-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .record-card {
