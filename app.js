@@ -37,6 +37,7 @@ let recordedChunks = [];
 let recordedAudioDataUrl = "";
 let recordingRecognition = null;
 let recordingTranscriptParts = [];
+let editingRecordId = null;
 
 initializeApp();
 setupVoiceTitle();
@@ -89,7 +90,7 @@ form.addEventListener("submit", async (event) => {
   const transcript = formData.get("audioTranscript").trim();
 
   const newRecord = {
-    id: createId(),
+    id: editingRecordId || createId(),
     title: formData.get("title").trim(),
     photos: selectedPhotos,
     photoName: selectedPhotos[0]?.name || "",
@@ -105,11 +106,17 @@ form.addEventListener("submit", async (event) => {
   };
 
   try {
-    records.unshift(newRecord);
+    if (editingRecordId) {
+      records = records.map((record) => (record.id === editingRecordId ? newRecord : record));
+    } else {
+      records.unshift(newRecord);
+    }
     await saveRecords();
-    setSaveStatus("저장되었습니다. 아래 기록 목록에서 확인할 수 있습니다.");
+    setSaveStatus(editingRecordId ? "수정되었습니다." : "저장되었습니다. 아래 기록 목록에서 확인할 수 있습니다.");
   } catch (error) {
-    records.shift();
+    if (!editingRecordId) {
+      records.shift();
+    }
     setSaveStatus(
       "저장 공간이 부족합니다. 사진을 1~2장으로 줄이거나 녹음 재생 저장 없이 다시 시도해주세요.",
       true,
@@ -136,6 +143,22 @@ clearRecordsButton.addEventListener("click", async () => {
   records = [];
   await saveRecords();
   renderRecords();
+});
+
+recordList.addEventListener("click", (event) => {
+  const editButton = event.target.closest("[data-edit-id]");
+
+  if (!editButton) {
+    return;
+  }
+
+  const record = records.find((item) => item.id === editButton.dataset.editId);
+
+  if (!record) {
+    return;
+  }
+
+  startEditRecord(record);
 });
 
 startRecordingButton.addEventListener("click", async () => {
@@ -442,6 +465,7 @@ function renderRecordCard(record) {
     <article class="record-card">
       <div class="record-photo">${photoMarkup}</div>
       <div class="record-content">
+        <button class="edit-button secondary-button" type="button" data-edit-id="${escapeHtml(record.id)}">수정</button>
         <h3>${escapeHtml(record.title)}</h3>
         <p class="meta-row">작성: ${escapeHtml(record.createdAt)}</p>
         <p class="meta-row">위치: ${escapeHtml(location)}</p>
@@ -539,6 +563,7 @@ function getRecordPhotos(record) {
 
 function resetForm() {
   form.reset();
+  editingRecordId = null;
   selectedPhotos = [];
   recordedAudioDataUrl = "";
   recordedChunks = [];
@@ -550,6 +575,35 @@ function resetForm() {
   startRecordingButton.disabled = false;
   stopRecordingButton.disabled = true;
   renderPhotoPreview();
+}
+
+function startEditRecord(record) {
+  editingRecordId = record.id;
+  const titleInput = document.querySelector("#title");
+  const locationInput = document.querySelector("#location");
+  const descriptionInput = document.querySelector("#description");
+  const tagsInput = document.querySelector("#tags");
+
+  titleInput.value = record.title || "";
+  locationInput.value = record.location || "";
+  descriptionInput.value = record.description || "";
+  tagsInput.value = (record.tags || []).join(", ");
+  audioTranscript.value = record.audioTranscript || "";
+  recordedAudioDataUrl = record.audioDataUrl || "";
+  selectedPhotos = getRecordPhotos(record);
+
+  if (recordedAudioDataUrl) {
+    recordedAudio.src = recordedAudioDataUrl;
+    recordedAudio.hidden = false;
+  } else {
+    recordedAudio.removeAttribute("src");
+    recordedAudio.hidden = true;
+  }
+
+  recordingStatus.textContent = "기존 기록을 수정 중입니다.";
+  renderPhotoPreview();
+  setSaveStatus("기존 기록을 수정 중입니다. 내용을 고친 뒤 저장을 누르세요.");
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function getAddressFromCoordinates(latitude, longitude) {

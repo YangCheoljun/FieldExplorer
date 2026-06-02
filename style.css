@@ -354,7 +354,14 @@ textarea {
 }
 
 .record-content {
+  position: relative;
   padding: 16px;
+}
+
+.edit-button {
+  float: right;
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 .record-content h3 {
